@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MAS AG-UI Protocol Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #FAFAF9;
+            color: #1C1917;
+        }
+
+        .font-mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 350px;
+            max-height: 400px;
+        }
+
+        .node-active {
+            box-shadow: 0 0 15px 5px rgba(234, 179, 8, 0.4);
+            border-color: #EAB308;
+            transform: scale(1.05);
+            transition: all 0.3s ease;
+        }
+
+        .node-idle {
+            transition: all 0.5s ease;
+        }
+
+        .log-enter {
+            animation: slideIn 0.3s ease-out forwards;
+            opacity: 0;
+            transform: translateX(20px);
+        }
+
+        @keyframes slideIn {
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #F5F5F4;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #D6D3D1;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+
+<body class="min-h-screen flex flex-col items-center pb-12">
+
+    <!-- Chosen Palette: Warm Neutrals with Semantic Accents (Stone background, Amber for user, Sky Blue for Orchestrator, Emerald for Math, Violet for String) -->
+
+    <!-- Application Structure Plan: The SPA is structured as a technical dashboard tailored for understanding the AG-UI protocol within a Multi-Agent System. 
+    1. Header & Theory: Answers the user's explicit conceptual question regarding MAF and AG-UI capabilities.
+    2. Interactive Simulator (The Core): A side-by-side layout featuring an active Architecture Diagram (left) and a Real-Time Execution Trace (right). This visualizes the invisible communication between magentic manager and participants.
+    3. Analytics: A Chart.js element to aggregate agent activity, fulfilling data viz requirements while adding insight into workload distribution. -->
+
+    <!-- Visualization & Content Choices: 
+    - Text Blocks: Used to explain AG-UI concepts and answer the user's specific architectural questions.
+    - Interactive Diagram (HTML/CSS ONLY): Maps the MAS structure. Interactivity (highlighting nodes) maps directly to the simulation state to show "who is talking".
+    - Execution Trace (HTML/JS): A terminal-like scrolling list to simulate streaming AG-UI protocol events (thoughts, tool calls).
+    - Doughnut Chart (Chart.js/Canvas): Summarizes agent workload post-simulation. Fulfills the chart requirement and provides analytical value.
+    - No SVG/Mermaid used. CSS Shapes, Unicode arrows (⬇️, ↘️, ↙️), and Canvas used instead. -->
+
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+
+    <div class="w-full max-w-6xl px-4 mt-8">
+
+        <header class="mb-10 text-center">
+            <h1 class="text-4xl font-bold text-stone-800 mb-3">MAS Execution & AG-UI Visualizer</h1>
+            <p class="text-stone-500 max-w-3xl mx-auto text-lg">Understanding Real-Time Agent Communication in Microsoft
+                Agent Framework (MAF)</p>
+        </header>
+
+        <section class="bg-white rounded-2xl shadow-sm border border-stone-200 p-8 mb-8">
+            <h2 class="text-2xl font-semibold mb-4 text-stone-800">Understanding AG-UI in MAF</h2>
+            <p class="text-stone-600 mb-4 leading-relaxed">
+                You asked: <em>"Is it possible to show the tool calls and communication between magentic manager and sub
+                    agents in the UI in real time? Does MAF's built-in AG-UI provide this feature out of the box?"</em>
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                <div class="bg-stone-50 p-5 rounded-xl border border-stone-100">
+                    <h3 class="font-semibold text-stone-800 mb-2">The Short Answer: YES</h3>
+                    <p class="text-stone-600 text-sm">
+                        AG-UI (Agent UI protocol) is specifically designed to stream the internal states of agents to a
+                        frontend. This includes <strong>thought processes, execution plans, and MCP tool
+                            calls/results</strong>. It bridges the gap between the backend orchestrator
+                        (MagenticBuilder) and the UI layer.
+                    </p>
+                </div>
+                <div class="bg-stone-50 p-5 rounded-xl border border-stone-100">
+                    <h3 class="font-semibold text-stone-800 mb-2">How it works out of the box</h3>
+                    <p class="text-stone-600 text-sm">
+                        Frameworks utilizing AG-UI emit events (often via Server-Sent Events or WebSockets) conforming
+                        to a schema. Your frontend listens to these event streams (e.g., <code>AgentThought</code>,
+                        <code>ToolCallBegin</code>, <code>ToolCallResult</code>) and renders them dynamically. The
+                        simulation below demonstrates exactly how this data structure looks and feels.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <div
+            class="bg-stone-800 text-stone-100 rounded-t-2xl px-6 py-4 flex justify-between items-center shadow-lg relative z-10">
+            <div>
+                <h2 class="font-semibold text-lg">Live AG-UI Simulation</h2>
+                <p class="text-stone-400 text-sm">Visualizing: "Solve 3+5*10/2 and then reverse the resulting output.
+                    Also reverse the string 'RACE'."</p>
+            </div>
+            <button id="startSimBtn"
+                class="bg-amber-500 hover:bg-amber-400 text-stone-900 font-bold py-2 px-6 rounded-lg transition-colors">
+                ▶ Start Simulation
+            </button>
+        </div>
+
+        <section
+            class="bg-white rounded-b-2xl shadow-lg border border-stone-200 overflow-hidden mb-8 flex flex-col lg:flex-row h-[600px]">
+
+            <div
+                class="w-full lg:w-5/12 bg-stone-50 border-r border-stone-200 p-6 flex flex-col justify-center relative">
+                <h3
+                    class="text-stone-500 uppercase tracking-wider text-xs font-bold mb-8 text-center absolute top-6 w-full left-0">
+                    MAS Architecture</h3>
+
+                <div class="flex flex-col items-center gap-4 w-full mt-4">
+
+                    <div id="node-user"
+                        class="node-idle bg-amber-100 border-2 border-amber-300 text-amber-800 px-6 py-3 rounded-full font-semibold z-10">
+                        👤 User
+                    </div>
+
+                    <div class="text-stone-300 font-bold text-xl">⬇️</div>
+
+                    <div id="node-chat"
+                        class="node-idle bg-stone-200 border-2 border-stone-300 text-stone-700 px-6 py-3 rounded-xl font-semibold z-10 text-center">
+                        💬 Chat Agent<br><span class="text-xs font-normal text-stone-500">(Interface)</span>
+                    </div>
+
+                    <div class="text-stone-300 font-bold text-xl">⬇️</div>
+
+                    <div id="node-orchestrator"
+                        class="node-idle bg-sky-100 border-2 border-sky-300 text-sky-800 px-8 py-4 rounded-xl font-bold z-10 text-center w-48">
+                        🧠 Orchestrator<br><span class="text-xs font-normal text-sky-600">(Magentic Manager)</span>
+                    </div>
+
+                    <div class="flex justify-center gap-16 w-full text-stone-300 font-bold text-xl mt-2 mb-2">
+                        <span>↙️</span>
+                        <span>↘️</span>
+                    </div>
+
+                    <div class="flex justify-center gap-6 w-full">
+                        <div id="node-math"
+                            class="node-idle bg-emerald-100 border-2 border-emerald-300 text-emerald-800 px-4 py-4 rounded-xl font-semibold z-10 text-center w-40 flex flex-col items-center">
+                            <span class="text-2xl mb-1">🧮</span>
+                            Math Agent
+                            <span class="text-[10px] bg-emerald-200 text-emerald-800 px-2 py-1 rounded mt-2">add, mul,
+                                div</span>
+                        </div>
+
+                        <div id="node-string"
+                            class="node-idle bg-violet-100 border-2 border-violet-300 text-violet-800 px-4 py-4 rounded-xl font-semibold z-10 text-center w-40 flex flex-col items-center">
+                            <span class="text-2xl mb-1">🔤</span>
+                            String Agent
+                            <span class="text-[10px] bg-violet-200 text-violet-800 px-2 py-1 rounded mt-2">upper, lower,
+                                rev</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="w-full lg:w-7/12 flex flex-col bg-stone-900 relative">
+                <div class="p-4 border-b border-stone-700 bg-stone-950 flex justify-between items-center">
+                    <h3 class="text-stone-300 text-sm font-mono">AG-UI Execution Trace Stream</h3>
+                    <span id="status-indicator" class="flex items-center text-xs text-stone-500 font-mono">
+                        <span class="w-2 h-2 rounded-full bg-stone-600 mr-2 inline-block"></span> Idle
+                    </span>
+                </div>
+
+                <div id="trace-container"
+                    class="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-3 font-mono text-sm pb-20">
+                </div>
+            </div>
+        </section>
+
+        <section class="bg-white rounded-2xl shadow-sm border border-stone-200 p-8 mb-12">
+            <h2 class="text-2xl font-semibold mb-6 text-stone-800 text-center">Post-Execution Analytics</h2>
+            <p class="text-stone-500 text-center mb-8 max-w-2xl mx-auto">
+                Once the MAS finishes routing the queries and executing tools, we can analyze the workload distribution.
+                This chart visualizes the number of operations (thoughts, delegations, tool calls) performed by each
+                agent in the network.
+            </p>
+
+            <div class="chart-container">
+                <canvas id="activityChart"></canvas>
+            </div>
+            <div id="chart-overlay" class="absolute mt-[-200px] w-full text-center text-stone-400 font-medium">
+                Run simulation to generate analytics.
+            </div>
+        </section>
+
+    </div>
+
+    <script>
+        const simulationSteps = [
+            { agent: 'User', type: 'input', message: 'Solve 3+5*10/2 and then reverse the resulting output. Also reverse the string "RACE".', time: 500, node: 'user' },
+            { agent: 'Chat Agent', type: 'forward', message: 'Forwarding task to Orchestrator...', time: 1000, node: 'chat' },
+            { agent: 'Orchestrator', type: 'thought', message: 'Parsing query. Plan: 1) Math Agent for calculation. 2) String Agent for reversing math result. 3) String Agent for reversing "RACE".', time: 2500, node: 'orchestrator' },
+            { agent: 'Orchestrator', type: 'delegate', message: 'Delegating to Math Agent: "Calculate 3+5*10/2"', time: 3500, node: 'orchestrator' },
+            { agent: 'Math Agent', type: 'thought', message: 'Following order of operations (PEMDAS/BODMAS). First: multiply.', time: 4500, node: 'math' },
+            { agent: 'Math Agent', type: 'tool', tool: 'multiply', input: '5, 10', output: '50', time: 5500, node: 'math' },
+            { agent: 'Math Agent', type: 'thought', message: 'Next: divide.', time: 6500, node: 'math' },
+            { agent: 'Math Agent', type: 'tool', tool: 'divide', input: '50, 2', output: '25', time: 7500, node: 'math' },
+            { agent: 'Math Agent', type: 'thought', message: 'Finally: add.', time: 8500, node: 'math' },
+            { agent: 'Math Agent', type: 'tool', tool: 'add', input: '3, 25', output: '28', time: 9500, node: 'math' },
+            { agent: 'Math Agent', type: 'response', message: 'The calculated result is 28.', time: 10500, node: 'math' },
+            { agent: 'Orchestrator', type: 'receive', message: 'Received 28 from Math Agent. Next step: Reverse it.', time: 11500, node: 'orchestrator' },
+            { agent: 'Orchestrator', type: 'delegate', message: 'Delegating to String Agent: "Reverse the string \'28\'"', time: 12500, node: 'orchestrator' },
+            { agent: 'String Agent', type: 'tool', tool: 'reverse', input: '"28"', output: '"82"', time: 13500, node: 'string' },
+            { agent: 'String Agent', type: 'response', message: 'The reversed string is "82".', time: 14500, node: 'string' },
+            { agent: 'Orchestrator', type: 'receive', message: 'Received "82". Final step: Reverse "RACE".', time: 15500, node: 'orchestrator' },
+            { agent: 'Orchestrator', type: 'delegate', message: 'Delegating to String Agent: "Reverse the string \'RACE\'"', time: 16500, node: 'orchestrator' },
+            { agent: 'String Agent', type: 'tool', tool: 'reverse', input: '"RACE"', output: '"ECAR"', time: 17500, node: 'string' },
+            { agent: 'String Agent', type: 'response', message: 'The reversed string is "ECAR".', time: 18500, node: 'string' },
+            { agent: 'Orchestrator', type: 'thought', message: 'All sub-tasks complete. Formatting final output for User.', time: 20000, node: 'orchestrator' },
+            { agent: 'Chat Agent', type: 'output', message: 'The math result is 28, which reversed is 82. The reversed string of "RACE" is "ECAR".', time: 21500, node: 'chat' }
+        ];
+
+        let isRunning = false;
+        let chartInstance = null;
+        let operationCounts = {
+            'Orchestrator': 0,
+            'Math Agent': 0,
+            'String Agent': 0,
+            'Chat Agent': 0
+        };
+
+        const startBtn = document.getElementById('startSimBtn');
+        const traceContainer = document.getElementById('trace-container');
+        const statusIndicator = document.getElementById('status-indicator');
+        const chartOverlay = document.getElementById('chart-overlay');
+
+        function resetUI() {
+            traceContainer.innerHTML = '';
+            document.querySelectorAll('[id^="node-"]').forEach(el => el.className = el.className.replace('node-active', 'node-idle'));
+            operationCounts = { 'Orchestrator': 0, 'Math Agent': 0, 'String Agent': 0, 'Chat Agent': 0 };
+            if (chartInstance) {
+                chartInstance.destroy();
+                chartOverlay.style.display = 'block';
+            }
+        }
+
+        function getAgentColors(agent) {
+            switch (agent) {
+                case 'User': return 'text-amber-400 bg-amber-900/30 border-amber-700/50';
+                case 'Chat Agent': return 'text-stone-300 bg-stone-800 border-stone-600';
+                case 'Orchestrator': return 'text-sky-400 bg-sky-900/30 border-sky-700/50';
+                case 'Math Agent': return 'text-emerald-400 bg-emerald-900/30 border-emerald-700/50';
+                case 'String Agent': return 'text-violet-400 bg-violet-900/30 border-violet-700/50';
+                default: return 'text-stone-400 bg-stone-800 border-stone-600';
+            }
+        }
+
+        function createLogEntry(step) {
+            const entry = document.createElement('div');
+            entry.className = 'log-enter border rounded p-3 mb-2 ' + getAgentColors(step.agent);
+
+            let contentHtml = `<div class="flex justify-between items-center mb-1">
+                <span class="font-bold text-xs uppercase tracking-wider">${step.agent}</span>
+                <span class="text-[10px] opacity-70">${new Date().toISOString().split('T')[1].substring(0, 8)}</span>
+            </div>`;
+
+            if (step.type === 'tool') {
+                contentHtml += `
+                    <div class="mt-2 text-stone-200">
+                        <span class="text-stone-400">Action:</span> <span class="bg-stone-950 px-1 rounded border border-stone-700 text-stone-300">Tool Call</span><br>
+                        <span class="text-stone-400">Function:</span> <span class="text-blue-300">${step.tool}</span><br>
+                        <span class="text-stone-400">Input:</span> ${step.input}<br>
+                        <span class="text-stone-400">Output:</span> <span class="text-green-400 font-bold">${step.output}</span>
+                    </div>
+                `;
+            } else {
+                contentHtml += `<div class="mt-1 text-stone-200">${step.message}</div>`;
+            }
+
+            entry.innerHTML = contentHtml;
+            return entry;
+        }
+
+        function highlightNode(nodeId) {
+            document.querySelectorAll('[id^="node-"]').forEach(el => {
+                el.classList.remove('node-active');
+                el.classList.add('node-idle');
+            });
+            if (nodeId) {
+                const activeNode = document.getElementById('node-' + nodeId);
+                if (activeNode) {
+                    activeNode.classList.remove('node-idle');
+                    activeNode.classList.add('node-active');
+                }
+            }
+        }
+
+        function renderChart() {
+            chartOverlay.style.display = 'none';
+            const ctx = document.getElementById('activityChart').getContext('2d');
+
+            chartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Orchestrator', 'Math Agent', 'String Agent', 'Chat Agent'],
+                    datasets: [{
+                        data: [
+                            operationCounts['Orchestrator'],
+                            operationCounts['Math Agent'],
+                            operationCounts['String Agent'],
+                            operationCounts['Chat Agent']
+                        ],
+                        backgroundColor: [
+                            '#38bdf8',
+                            '#34d399',
+                            '#a78bfa',
+                            '#a8a29e'
+                        ],
+                        borderWidth: 0,
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom' },
+                        tooltip: {
+                            callbacks: {
+                                label: function (context) {
+                                    return ' ' + context.label + ': ' + context.raw + ' operations';
+                                }
+                            }
+                        }
+                    },
+                    cutout: '65%'
+                }
+            });
+        }
+
+        async function runSimulation() {
+            if (isRunning) return;
+            isRunning = true;
+            resetUI();
+
+            startBtn.disabled = true;
+            startBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            startBtn.innerText = 'Running...';
+
+            statusIndicator.innerHTML = '<span class="w-2 h-2 rounded-full bg-green-500 animate-pulse mr-2 inline-block"></span> Streaming Event Trace...';
+
+            let currentTime = 0;
+
+            for (const step of simulationSteps) {
+                const delay = step.time - currentTime;
+                currentTime = step.time;
+
+                await new Promise(r => setTimeout(r, delay));
+
+                highlightNode(step.node);
+
+                const logEl = createLogEntry(step);
+                traceContainer.appendChild(logEl);
+                traceContainer.scrollTop = traceContainer.scrollHeight;
+
+                if (operationCounts[step.agent] !== undefined) {
+                    operationCounts[step.agent]++;
+                }
+            }
+
+            statusIndicator.innerHTML = '<span class="w-2 h-2 rounded-full bg-stone-600 mr-2 inline-block"></span> Completed';
+            highlightNode(null);
+
+            startBtn.disabled = false;
+            startBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            startBtn.innerText = '▶ Re-run Simulation';
+            isRunning = false;
+
+            renderChart();
+        }
+
+        startBtn.addEventListener('click', runSimulation);
+
+    </script>
+</body>
+
+</html>

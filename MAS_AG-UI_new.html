@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MAF & AG-UI Protocol Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500;600&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            /* Slate 900 */
+            color: #f8fafc;
+            /* Slate 50 */
+            background-image: radial-gradient(#334155 1px, transparent 1px);
+            background-size: 24px 24px;
+        }
+
+        .font-mono {
+            font-family: 'Fira Code', monospace;
+        }
+
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 350px;
+            max-height: 400px;
+        }
+
+        /* Glassmorphism utilities */
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            /* Slate 800 */
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .node-active {
+            box-shadow: 0 0 20px 4px rgba(99, 102, 241, 0.6);
+            /* Indigo glow */
+            border-color: #818cf8 !important;
+            transform: scale(1.05);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 20;
+        }
+
+        .node-idle {
+            transition: all 0.5s ease;
+            opacity: 0.85;
+        }
+
+        .log-enter {
+            animation: slideIn 0.3s ease-out forwards;
+            opacity: 0;
+            transform: translateY(10px);
+        }
+
+        @keyframes slideIn {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.5);
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 10px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+
+        /* Gradient Text */
+        .text-gradient {
+            background: linear-gradient(to right, #818cf8, #38bdf8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+    </style>
+</head>
+
+<body class="min-h-screen flex flex-col items-center pb-12 pt-8">
+
+    <!-- Chosen Palette: Modern Dark Mode. Slate backgrounds, Indigo for primary actions/orchestrator, Emerald for Math, Violet for String, Cyan for tool calls. -->
+
+    <!-- Application Structure Plan: 
+    1. Hero/Header: Sleek, high-contrast introduction.
+    2. Architecture & Concept: Explains MAF, MCP, and AG-UI events factually, correcting previous misconceptions.
+    3. The Interactive MAS Visualizer: The core SPA. Left pane shows the node graph of MAF. Right pane is a stylized terminal tracking strict AG-UI events (RunStart, ToolCallStart, ToolCallEnd, etc.) streamed in real-time.
+    4. Analytics: Chart.js visualization of event types. -->
+
+    <!-- Visualization & Content Choices: 
+    - Styling: Upgraded to a polished, developer-focused dark theme with glassmorphism and subtle background patterns to make it visually engaging without being cluttered.
+    - Graph Layout: Flex/Grid HTML nodes to represent the MagenticBuilder orchestrator and participants.
+    - Real-time Trace: Terminal-style UI processing strictly defined AG-UI events, demonstrating exactly how the frontend receives backend state.
+    - NO SVG/Mermaid used. CSS, Unicode, and Canvas only. -->
+
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+
+    <div class="w-full max-w-7xl px-4 lg:px-8">
+
+        <header class="mb-12 text-center">
+            <div
+                class="inline-block px-4 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-sm font-semibold mb-4 font-mono tracking-wide">
+                MAF • MCP • AG-UI
+            </div>
+            <h1 class="text-4xl md:text-5xl font-bold mb-4 tracking-tight">MAS <span class="text-gradient">Real-Time
+                    Observability</span></h1>
+            <p class="text-slate-400 max-w-2xl mx-auto text-lg">Visualizing the AG-UI protocol event stream over the
+                Microsoft Agent Framework (MAF).</p>
+        </header>
+
+        <!-- CONCEPTUAL EXPLANATION -->
+        <section class="glass-panel rounded-2xl p-8 mb-10 shadow-xl">
+            <h2 class="text-2xl font-bold mb-6 text-slate-100 flex items-center gap-3">
+                <span class="bg-indigo-500/20 p-2 rounded-lg text-indigo-400">⚡</span>
+                How MAF, MCP, and AG-UI Work Together
+            </h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div
+                    class="bg-slate-800/50 p-6 rounded-xl border border-slate-700/50 hover:border-indigo-500/30 transition-colors">
+                    <div class="font-mono text-xs text-indigo-400 mb-2">01. The Engine</div>
+                    <h3 class="font-bold text-slate-200 mb-2">Microsoft Agent Framework (MAF)</h3>
+                    <p class="text-slate-400 text-sm leading-relaxed">
+                        MAF acts as the backend execution environment. Using <code>MagenticBuilder</code>, you define
+                        the <strong>Orchestrator Agent</strong> (the magentic manager) and <strong>Participant
+                            Agents</strong> (Math, String). MAF handles the routing logic, prompting, and maintaining
+                        the conversation graph.
+                    </p>
+                </div>
+
+                <div
+                    class="bg-slate-800/50 p-6 rounded-xl border border-slate-700/50 hover:border-emerald-500/30 transition-colors">
+                    <div class="font-mono text-xs text-emerald-400 mb-2">02. The Tools</div>
+                    <h3 class="font-bold text-slate-200 mb-2">Model Context Protocol (MCP)</h3>
+                    <p class="text-slate-400 text-sm leading-relaxed">
+                        Instead of hardcoding functions, MAF integrates with MCP. When the Math Agent needs to multiply,
+                        MAF acts as an MCP Client and sends a JSON-RPC request to the connected MCP Server hosting the
+                        Calculator tools, standardizing tool execution.
+                    </p>
+                </div>
+
+                <div
+                    class="bg-slate-800/50 p-6 rounded-xl border border-slate-700/50 hover:border-cyan-500/30 transition-colors">
+                    <div class="font-mono text-xs text-cyan-400 mb-2">03. The Protocol</div>
+                    <h3 class="font-bold text-slate-200 mb-2">AG-UI Protocol</h3>
+                    <p class="text-slate-400 text-sm leading-relaxed">
+                        AG-UI is the standardized wire protocol. MAF emits internal framework states. An adapter
+                        translates these into strict AG-UI events (e.g., <code>RunStart</code>,
+                        <code>MessageStart</code>, <code>ToolCallStart</code>, <code>ToolCallEnd</code>) and streams
+                        them to the UI via Server-Sent Events (SSE). <em>Note: There are no arbitrary events like
+                            'AgentThought'.</em>
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- THE SIMULATOR -->
+        <div
+            class="bg-slate-800 rounded-t-2xl px-6 py-4 flex justify-between items-center shadow-lg border border-slate-700 border-b-0">
+            <div>
+                <h2 class="font-semibold text-lg text-slate-200">AG-UI Event Stream Simulator</h2>
+                <p class="text-slate-400 text-sm">Query: "Solve 3+5*10/2 and then reverse the resulting output. Also
+                    reverse the string 'RACE'."</p>
+            </div>
+            <button id="startSimBtn"
+                class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2.5 px-6 rounded-lg transition-all shadow-[0_0_15px_rgba(79,70,229,0.4)]">
+                ▶ Execute Graph
+            </button>
+        </div>
+
+        <section
+            class="glass-panel rounded-b-2xl shadow-2xl border border-slate-700 overflow-hidden mb-12 flex flex-col lg:flex-row h-[650px]">
+
+            <!-- LEFT PANE: MAF Architecture -->
+            <div
+                class="w-full lg:w-5/12 bg-slate-900/50 border-r border-slate-700 p-6 flex flex-col items-center relative">
+                <div
+                    class="absolute top-4 left-4 bg-slate-800 border border-slate-600 text-slate-300 text-[10px] uppercase font-bold tracking-widest px-3 py-1 rounded">
+                    MAF Backend
+                </div>
+
+                <div class="flex flex-col items-center gap-4 w-full mt-10">
+
+                    <div id="node-user"
+                        class="node-idle bg-slate-800 border border-slate-600 text-slate-200 px-6 py-2 rounded-full font-medium text-sm z-10 shadow-lg">
+                        👤 Client / User
+                    </div>
+
+                    <div class="text-slate-600 font-bold text-xl">⬇</div>
+
+                    <div id="node-chat"
+                        class="node-idle bg-slate-800 border-2 border-slate-600 text-slate-200 px-6 py-3 rounded-xl z-10 text-center shadow-lg">
+                        💬 Chat Agent<br><span class="text-[10px] font-mono text-slate-400 mt-1 block">User-Facing
+                            Node</span>
+                    </div>
+
+                    <div class="text-slate-600 font-bold text-xl">⬇</div>
+
+                    <div id="node-orchestrator"
+                        class="node-idle bg-indigo-900/40 border-2 border-indigo-500/50 text-indigo-100 px-8 py-4 rounded-xl z-10 text-center w-56 shadow-[0_0_15px_rgba(99,102,241,0.2)]">
+                        🧠 Orchestrator Agent<br><span class="text-[10px] font-mono text-indigo-300 mt-1 block">Magentic
+                            Manager</span>
+                    </div>
+
+                    <div class="flex justify-center gap-20 w-full text-slate-600 font-bold text-2xl my-2">
+                        <span>↙</span>
+                        <span>↘</span>
+                    </div>
+
+                    <div class="flex justify-center gap-6 w-full">
+                        <div id="node-math"
+                            class="node-idle bg-emerald-900/30 border-2 border-emerald-500/40 text-emerald-100 px-4 py-4 rounded-xl z-10 text-center w-44 flex flex-col items-center shadow-lg relative">
+                            <span class="text-2xl mb-2">🧮</span>
+                            <span class="font-semibold text-sm">Math Agent</span>
+                            <div class="mt-3 border-t border-emerald-500/30 w-full pt-2">
+                                <span class="text-[9px] font-mono text-emerald-300/70 block mb-1">MCP Tools</span>
+                                <div class="flex flex-wrap justify-center gap-1">
+                                    <span
+                                        class="text-[9px] bg-emerald-950 border border-emerald-700 px-1.5 py-0.5 rounded">add</span>
+                                    <span
+                                        class="text-[9px] bg-emerald-950 border border-emerald-700 px-1.5 py-0.5 rounded">mul</span>
+                                    <span
+                                        class="text-[9px] bg-emerald-950 border border-emerald-700 px-1.5 py-0.5 rounded">div</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="node-string"
+                            class="node-idle bg-violet-900/30 border-2 border-violet-500/40 text-violet-100 px-4 py-4 rounded-xl z-10 text-center w-44 flex flex-col items-center shadow-lg relative">
+                            <span class="text-2xl mb-2">🔤</span>
+                            <span class="font-semibold text-sm">String Agent</span>
+                            <div class="mt-3 border-t border-violet-500/30 w-full pt-2">
+                                <span class="text-[9px] font-mono text-violet-300/70 block mb-1">MCP Tools</span>
+                                <div class="flex flex-wrap justify-center gap-1">
+                                    <span
+                                        class="text-[9px] bg-violet-950 border border-violet-700 px-1.5 py-0.5 rounded">upper</span>
+                                    <span
+                                        class="text-[9px] bg-violet-950 border border-violet-700 px-1.5 py-0.5 rounded">lower</span>
+                                    <span
+                                        class="text-[9px] bg-violet-950 border border-violet-700 px-1.5 py-0.5 rounded">rev</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT PANE: AG-UI Terminal -->
+            <div class="w-full lg:w-7/12 flex flex-col bg-[#0a0a0a] relative">
+                <div class="p-4 border-b border-slate-800 bg-[#0f0f0f] flex justify-between items-center z-10">
+                    <h3 class="text-slate-400 text-xs font-mono font-semibold tracking-wider flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-red-500"></span>
+                        <span class="w-2 h-2 rounded-full bg-yellow-500"></span>
+                        <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                        <span class="ml-2">AG-UI Event Stream</span>
+                    </h3>
+                    <span id="status-indicator"
+                        class="flex items-center text-[10px] text-slate-500 font-mono uppercase tracking-widest bg-slate-900 px-2 py-1 rounded border border-slate-800">
+                        <span class="w-1.5 h-1.5 rounded-full bg-slate-600 mr-2 inline-block"></span> Disconnected
+                    </span>
+                </div>
+
+                <div id="trace-container"
+                    class="flex-1 overflow-y-auto p-5 custom-scrollbar space-y-4 font-mono text-[13px] pb-20 leading-relaxed">
+                    <div class="text-slate-600 text-center mt-20">Waiting for SSE connection...</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- EVENT ANALYTICS -->
+        <section class="glass-panel rounded-2xl p-8 mb-12 relative overflow-hidden">
+            <div class="absolute top-0 left-0 w-1 bg-indigo-500 h-full"></div>
+            <h2 class="text-2xl font-bold mb-2 text-slate-100">Protocol Event Analytics</h2>
+            <p class="text-slate-400 mb-8 max-w-2xl text-sm">
+                Breakdown of verified AG-UI events fired during the MAF execution cycle.
+            </p>
+
+            <div class="chart-container">
+                <canvas id="eventChart"></canvas>
+            </div>
+            <div id="chart-overlay"
+                class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center text-slate-500 font-mono text-sm bg-slate-900/80 p-4 rounded-lg backdrop-blur border border-slate-700">
+                Data will populate post-execution.
+            </div>
+        </section>
+
+    </div>
+
+    <script>
+        // Verified AG-UI protocol events mapping
+        // We use strict event types: RunStart, MessageStart, MessageChunk, MessageEnd, ToolCallStart, ToolCallEnd, RunEnd
+        const simulationSteps = [
+            // Initialization
+            { node: 'user', agent: 'Client', event: 'RequestInit', detail: 'POST /api/chat/stream', time: 500, class: 'text-slate-400' },
+            { node: 'chat', agent: 'System', event: 'RunStart', detail: 'Run ID: run_abc123 initialized by Chat Agent.', time: 1000, class: 'text-indigo-400' },
+
+            // Orchestration phase
+            { node: 'orchestrator', agent: 'Magentic Manager', event: 'MessageStart', detail: 'Role: Assistant. Parsing query and generating routing plan.', time: 2000, class: 'text-slate-300' },
+            { node: 'orchestrator', agent: 'Magentic Manager', event: 'MessageChunk', detail: 'Content: "Delegating calculation to Math Agent via MCP..."', time: 3000, class: 'text-slate-300' },
+            { node: 'orchestrator', agent: 'Magentic Manager', event: 'MessageEnd', detail: 'Finished plan generation.', time: 3500, class: 'text-slate-500' },
+
+            // Math Execution
+            { node: 'math', agent: 'Math Agent', event: 'RunStepStart', detail: 'Processing mathematical expression: 3+5*10/2', time: 4500, class: 'text-emerald-400' },
+            { node: 'math', agent: 'Math Agent', event: 'ToolCallStart', tool: 'multiply', input: '{"a": 5, "b": 10}', time: 5500, class: 'text-cyan-400' },
+            { node: 'math', agent: 'Math Agent', event: 'ToolCallEnd', tool: 'multiply', result: '{"result": 50}', time: 6500, class: 'text-cyan-300' },
+            { node: 'math', agent: 'Math Agent', event: 'ToolCallStart', tool: 'divide', input: '{"a": 50, "b": 2}', time: 7000, class: 'text-cyan-400' },
+            { node: 'math', agent: 'Math Agent', event: 'ToolCallEnd', tool: 'divide', result: '{"result": 25}', time: 8000, class: 'text-cyan-300' },
+            { node: 'math', agent: 'Math Agent', event: 'ToolCallStart', tool: 'add', input: '{"a": 3, "b": 25}', time: 8500, class: 'text-cyan-400' },
+            { node: 'math', agent: 'Math Agent', event: 'ToolCallEnd', tool: 'add', result: '{"result": 28}', time: 9500, class: 'text-cyan-300' },
+            { node: 'math', agent: 'Math Agent', event: 'RunStepEnd', detail: 'Math Agent run completed. Result: 28.', time: 10000, class: 'text-emerald-500' },
+
+            // String Execution 1 (Math Result)
+            { node: 'orchestrator', agent: 'Magentic Manager', event: 'MessageStart', detail: 'Routing result to String Agent for reversal.', time: 11000, class: 'text-slate-300' },
+            { node: 'string', agent: 'String Agent', event: 'RunStepStart', detail: 'Processing request: Reverse string "28"', time: 12000, class: 'text-violet-400' },
+            { node: 'string', agent: 'String Agent', event: 'ToolCallStart', tool: 'reverse', input: '{"text": "28"}', time: 13000, class: 'text-cyan-400' },
+            { node: 'string', agent: 'String Agent', event: 'ToolCallEnd', tool: 'reverse', result: '{"result": "82"}', time: 14000, class: 'text-cyan-300' },
+            { node: 'string', agent: 'String Agent', event: 'RunStepEnd', detail: 'String Agent run completed. Result: "82".', time: 14500, class: 'text-violet-500' },
+
+            // String Execution 2 ("RACE")
+            { node: 'orchestrator', agent: 'Magentic Manager', event: 'MessageStart', detail: 'Routing second request to String Agent.', time: 15500, class: 'text-slate-300' },
+            { node: 'string', agent: 'String Agent', event: 'RunStepStart', detail: 'Processing request: Reverse string "RACE"', time: 16000, class: 'text-violet-400' },
+            { node: 'string', agent: 'String Agent', event: 'ToolCallStart', tool: 'reverse', input: '{"text": "RACE"}', time: 17000, class: 'text-cyan-400' },
+            { node: 'string', agent: 'String Agent', event: 'ToolCallEnd', tool: 'reverse', result: '{"result": "ECAR"}', time: 18000, class: 'text-cyan-300' },
+            { node: 'string', agent: 'String Agent', event: 'RunStepEnd', detail: 'String Agent run completed. Result: "ECAR".', time: 18500, class: 'text-violet-500' },
+
+            // Finalization
+            { node: 'orchestrator', agent: 'Magentic Manager', event: 'MessageStart', detail: 'Formatting final payload.', time: 19500, class: 'text-slate-300' },
+            { node: 'chat', agent: 'Chat Agent', event: 'MessageChunk', detail: 'Content: "The math result is 28, which reversed is 82. The reversed string of RACE is ECAR."', time: 20500, class: 'text-slate-100 font-semibold' },
+            { node: 'chat', agent: 'System', event: 'RunEnd', detail: 'Run ID: run_abc123 finished successfully.', time: 21000, class: 'text-indigo-400' }
+        ];
+
+        let isRunning = false;
+        let chartInstance = null;
+
+        // Track strictly AG-UI Event occurrences
+        let eventCounts = {
+            'Run/Step Events': 0,    // RunStart, RunEnd, RunStepStart, RunStepEnd
+            'Message Events': 0,     // MessageStart, MessageChunk, MessageEnd
+            'ToolCallStart': 0,
+            'ToolCallEnd': 0
+        };
+
+        const startBtn = document.getElementById('startSimBtn');
+        const traceContainer = document.getElementById('trace-container');
+        const statusIndicator = document.getElementById('status-indicator');
+        const chartOverlay = document.getElementById('chart-overlay');
+
+        function resetUI() {
+            traceContainer.innerHTML = '';
+            document.querySelectorAll('[id^="node-"]').forEach(el => el.className = el.className.replace('node-active', 'node-idle'));
+
+            eventCounts = { 'Run/Step Events': 0, 'Message Events': 0, 'ToolCallStart': 0, 'ToolCallEnd': 0 };
+
+            if (chartInstance) {
+                chartInstance.destroy();
+                chartOverlay.style.display = 'block';
+            }
+        }
+
+        function createLogEntry(step) {
+            const entry = document.createElement('div');
+            entry.className = `log-enter border-l-2 border-slate-700 pl-4 py-1 relative`;
+
+            // Add a little dot on the timeline
+            const dotColor = getDotColor(step.event);
+            entry.innerHTML = `
+                <div class="absolute -left-[5px] top-2.5 w-2 h-2 rounded-full ${dotColor} shadow-[0_0_8px_${dotColor.replace('bg-', '')}]"></div>
+                <div class="flex items-baseline gap-3 mb-1">
+                    <span class="text-xs text-slate-500 font-bold w-16">${new Date().toISOString().split('T')[1].substring(0, 8)}</span>
+                    <span class="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] text-slate-300 border border-slate-700 uppercase tracking-wider">${step.event}</span>
+                    <span class="text-xs text-slate-400 ml-auto">[${step.agent}]</span>
+                </div>
+            `;
+
+            let contentHtml = `<div class="mt-1 pl-19 ${step.class}">`;
+
+            if (step.event === 'ToolCallStart') {
+                contentHtml += `<span class="text-slate-500">▶ Executing</span> <span class="text-cyan-300 bg-cyan-900/30 px-1 rounded">${step.tool}</span> <br>
+                                <span class="text-slate-500">Params:</span> ${step.input}`;
+            } else if (step.event === 'ToolCallEnd') {
+                contentHtml += `<span class="text-slate-500">◀ Returned</span> <span class="text-emerald-300">${step.result}</span>`;
+            } else {
+                contentHtml += `${step.detail}`;
+            }
+
+            contentHtml += `</div>`;
+            entry.innerHTML += contentHtml;
+            return entry;
+        }
+
+        function getDotColor(event) {
+            if (event.includes('Tool')) return 'bg-cyan-500';
+            if (event.includes('Message')) return 'bg-slate-300';
+            if (event.includes('Run')) return 'bg-indigo-500';
+            return 'bg-slate-600';
+        }
+
+        function countEvent(event) {
+            if (event.includes('Run')) eventCounts['Run/Step Events']++;
+            else if (event.includes('Message')) eventCounts['Message Events']++;
+            else if (event === 'ToolCallStart') eventCounts['ToolCallStart']++;
+            else if (event === 'ToolCallEnd') eventCounts['ToolCallEnd']++;
+        }
+
+        function highlightNode(nodeId) {
+            document.querySelectorAll('[id^="node-"]').forEach(el => {
+                el.classList.remove('node-active');
+                el.classList.add('node-idle');
+            });
+            if (nodeId) {
+                const activeNode = document.getElementById('node-' + nodeId);
+                if (activeNode) {
+                    activeNode.classList.remove('node-idle');
+                    activeNode.classList.add('node-active');
+                }
+            }
+        }
+
+        function renderChart() {
+            chartOverlay.style.display = 'none';
+            const ctx = document.getElementById('eventChart').getContext('2d');
+
+            Chart.defaults.color = '#94a3b8'; // text-slate-400
+            Chart.defaults.font.family = "'Fira Code', monospace";
+
+            chartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(eventCounts),
+                    datasets: [{
+                        label: 'Events Emitted',
+                        data: Object.values(eventCounts),
+                        backgroundColor: [
+                            'rgba(99, 102, 241, 0.8)', // Indigo
+                            'rgba(203, 213, 225, 0.8)', // Slate
+                            'rgba(6, 182, 212, 0.8)',  // Cyan
+                            'rgba(16, 185, 129, 0.8)'  // Emerald
+                        ],
+                        borderColor: [
+                            'rgb(99, 102, 241)',
+                            'rgb(203, 213, 225)',
+                            'rgb(6, 182, 212)',
+                            'rgb(16, 185, 129)'
+                        ],
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(51, 65, 85, 0.5)' }, // slate-700
+                            ticks: { stepSize: 2 }
+                        },
+                        x: {
+                            grid: { display: false }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                            titleColor: '#f8fafc',
+                            bodyColor: '#cbd5e1',
+                            borderColor: 'rgba(51, 65, 85, 1)',
+                            borderWidth: 1
+                        }
+                    }
+                }
+            });
+        }
+
+        async function runSimulation() {
+            if (isRunning) return;
+            isRunning = true;
+            resetUI();
+
+            startBtn.disabled = true;
+            startBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            startBtn.innerHTML = 'Streaming SSE...';
+
+            statusIndicator.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping mr-2 inline-block"></span> Connected (SSE)';
+            statusIndicator.classList.replace('text-slate-500', 'text-emerald-400');
+            statusIndicator.classList.replace('border-slate-800', 'border-emerald-900');
+            statusIndicator.classList.add('bg-emerald-950/50');
+
+            let currentTime = 0;
+
+            for (const step of simulationSteps) {
+                const delay = step.time - currentTime;
+                currentTime = step.time;
+
+                await new Promise(r => setTimeout(r, delay));
+
+                highlightNode(step.node);
+                countEvent(step.event);
+
+                const logEl = createLogEntry(step);
+                traceContainer.appendChild(logEl);
+                traceContainer.scrollTop = traceContainer.scrollHeight;
+            }
+
+            statusIndicator.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-slate-500 mr-2 inline-block"></span> Connection Closed';
+            statusIndicator.classList.replace('text-emerald-400', 'text-slate-500');
+            statusIndicator.classList.replace('border-emerald-900', 'border-slate-800');
+            statusIndicator.classList.remove('bg-emerald-950/50');
+
+            highlightNode(null);
+
+            startBtn.disabled = false;
+            startBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            startBtn.innerHTML = '▶ Re-run Simulation';
+            isRunning = false;
+
+            renderChart();
+        }
+
+        startBtn.addEventListener('click', runSimulation);
+
+    </script>
+</body>
+
+</html>
