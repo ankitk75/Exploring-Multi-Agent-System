@@ -1,0 +1,21 @@
+# =============================================================================
+# Microsoft Agent Framework (MAF) - Multi-Agent System Dependencies
+# =============================================================================
+
+# Microsoft Agent Framework - Full SDK
+# Includes core, openai, ollama, a2a, ag-ui, orchestrations sub-packages
+agent-framework
+
+# MCP (Model Context Protocol) - Tool server framework
+mcp[cli]
+
+# FastAPI + Uvicorn - HTTP framework and ASGI server for SSE endpoint
+fastapi
+uvicorn[standard]
+
+# HTTP client libraries for A2A communication
+httpx
+httpx-sse
+
+# OpenAI Python SDK (used by agent-framework's openai package)
+openai
