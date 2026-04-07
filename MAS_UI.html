@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AG-UI Multi-Agent System Simulation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* Custom Scrollbar for Terminal */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #111827;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #374151;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #4B5563;
+        }
+
+        .typing-indicator::after {
+            content: '▌';
+            animation: blink 1s step-start infinite;
+            color: #3B82F6;
+            margin-left: 2px;
+        }
+
+        @keyframes blink {
+            50% {
+                opacity: 0;
+            }
+        }
+
+        .nested-line {
+            border-left: 2px solid #374151;
+            margin-left: 1rem;
+            padding-left: 1rem;
+        }
+
+        /* Syntax Highlighting for JSON console */
+        .json-key {
+            color: #93C5FD;
+        }
+
+        .json-string {
+            color: #A7F3D0;
+        }
+
+        .json-number {
+            color: #FDBA74;
+        }
+
+        .json-boolean {
+            color: #FCA5A5;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-900 text-gray-100 h-screen flex flex-col font-sans overflow-hidden">
+
+    <!-- Header -->
+    <header class="bg-gray-800 border-b border-gray-700 p-4 flex justify-between items-center z-10 shrink-0">
+        <div class="flex items-center gap-3">
+            <div class="bg-blue-600 p-2 rounded-lg">
+                <i data-lucide="network" class="text-white w-6 h-6"></i>
+            </div>
+            <div>
+                <h1 class="text-xl font-bold leading-tight">AG-UI Agentic Workflow Simulator</h1>
+                <p class="text-xs text-gray-400">Nested Orchestration: Chat Agent > Magentic Manager > Math & String
+                    Agents</p>
+            </div>
+        </div>
+        <div class="flex gap-3">
+            <button id="startBtn"
+                class="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-md font-medium flex items-center gap-2 transition-colors">
+                <i data-lucide="play" class="w-4 h-4"></i> Run Simulation
+            </button>
+            <button id="resetBtn"
+                class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-md font-medium flex items-center gap-2 transition-colors disabled:opacity-50">
+                <i data-lucide="rotate-ccw" class="w-4 h-4"></i> Reset
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content Split -->
+    <main class="flex-1 flex overflow-hidden">
+
+        <!-- Chat UI (User Facing) -->
+        <section class="w-3/5 flex flex-col bg-gray-900 border-r border-gray-700">
+            <div
+                class="bg-gray-800/50 py-2 px-4 border-b border-gray-800 text-sm text-gray-400 font-medium flex items-center gap-2">
+                <i data-lucide="message-square" class="w-4 h-4"></i> User Interface
+            </div>
+
+            <div id="chatContainer" class="flex-1 overflow-y-auto p-6 space-y-6">
+                <!-- Chat messages will be injected here -->
+                <div class="text-center text-gray-500 mt-20" id="emptyState">
+                    <i data-lucide="bot" class="w-16 h-16 mx-auto mb-4 opacity-50"></i>
+                    <p>Select a query below and click "Send" to see nested agent execution via AG-UI.</p>
+                </div>
+            </div>
+
+            <!-- Input Area -->
+            <div class="p-4 bg-gray-800 border-t border-gray-700 shrink-0">
+                <div class="flex gap-2">
+                    <select id="querySelect"
+                        class="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-gray-300 focus:outline-none focus:border-blue-500">
+                        <option value="sc1">Process the string 'hello' by reversing it, then calculate 15 multiplied by
+                            4.</option>
+                        <option value="sc2">Solve 3+5*10/2 and reverse the result. Also reverse "race" and convert to
+                            uppercase.</option>
+                        <option value="sc3">Calculate the square root of 144, add it to 100, and then divide by 2.
+                        </option>
+                        <option value="sc4">Convert the string "multi-agent orchestration" to uppercase, then reverse
+                            it.</option>
+                    </select>
+                    <button id="sendBtn"
+                        class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-lg font-medium flex items-center gap-2 transition-colors">
+                        <i data-lucide="send" class="w-4 h-4"></i> Send
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- AG-UI Telemetry Console -->
+        <section class="w-2/5 flex flex-col bg-[#0d1117]">
+            <div
+                class="bg-[#161b22] py-2 px-4 border-b border-gray-800 text-sm text-gray-400 font-medium flex justify-between items-center shrink-0">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="terminal" class="w-4 h-4"></i> AG-UI SSE Stream
+                </div>
+                <div class="flex items-center gap-2 text-xs">
+                    <span class="relative flex h-2 w-2">
+                        <span
+                            class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"
+                            id="streamPulse" style="display:none;"></span>
+                        <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500" id="streamDot"></span>
+                    </span>
+                    Connection Active
+                </div>
+            </div>
+
+            <div id="consoleContainer" class="flex-1 overflow-y-auto p-4 font-mono text-xs leading-relaxed space-y-2">
+                <div class="text-gray-500">// Waiting for SSE connection...</div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Templates for dynamic rendering -->
+    <template id="tpl-user-msg">
+        <div class="flex justify-end">
+            <div class="bg-blue-600 text-white px-5 py-3 rounded-2xl rounded-tr-sm max-w-[80%] shadow-md">
+                <span class="msg-content"></span>
+            </div>
+        </div>
+    </template>
+
+    <template id="tpl-agent-wrapper">
+        <div class="flex items-start gap-4 max-w-[95%]">
+            <div
+                class="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center shrink-0 border border-gray-600">
+                <i data-lucide="bot" class="w-5 h-5 text-blue-400"></i>
+            </div>
+            <div class="flex-1 space-y-3 agent-content-area text-gray-200">
+                <!-- Content goes here -->
+            </div>
+        </div>
+    </template>
+
+    <template id="tpl-nested-workflow">
+        <div class="bg-gray-800/80 border border-gray-700 rounded-lg overflow-hidden shadow-inner mt-2">
+            <!-- Tool Header -->
+            <div
+                class="bg-gray-800 px-4 py-2 border-b border-gray-700 flex items-center gap-2 text-xs font-mono text-blue-300">
+                <i data-lucide="boxes" class="w-4 h-4"></i>
+                <span>Tool Call: <span class="font-semibold text-blue-200">MagenticWorkflow</span></span>
+                <span class="ml-auto flex items-center gap-1 text-gray-400 animate-pulse active-indicator">
+                    <i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> executing...
+                </span>
+            </div>
+            <!-- Workflow Body -->
+            <div class="p-4 space-y-4 text-sm workflow-body">
+                <!-- Magentic Manager, Math, String steps inject here -->
+            </div>
+        </div>
+    </template>
+
+    <script>
+        // Initialize Lucide Icons
+        lucide.createIcons();
+
+        // DOM Elements
+        const chatContainer = document.getElementById('chatContainer');
+        const consoleContainer = document.getElementById('consoleContainer');
+        const startBtn = document.getElementById('startBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const emptyState = document.getElementById('emptyState');
+        const streamPulse = document.getElementById('streamPulse');
+
+        // Simulation State
+        let isRunning = false;
+        let activeAgentWrapper = null;
+        let activeWorkflowBody = null;
+
+        const sendBtn = document.getElementById('sendBtn');
+        const querySelect = document.getElementById('querySelect');
+
+        // The Simulation Script (Mapping UI actions to simulated AG-UI SSE events)
+        const allScenarios = {
+            sc1: [
+                { action: 'USER_MSG', text: "Process the string 'hello' by reversing it, then calculate 15 multiplied by 4. Tell me the results.", delay: 500 },
+                { action: 'SSE', payload: { type: "RUN_STARTED", threadId: "th_9x8k", runId: "run_ui1" }, delay: 200 },
+                { action: 'AGENT_START', delay: 400 },
+                { action: 'SSE', payload: { type: "TOOL_CALL_START", toolCallId: "call_mag_1", toolCallName: "MagenticWorkflow" }, delay: 500 },
+                { action: 'WORKFLOW_START', delay: 600 },
+                { action: 'SSE', payload: { type: "MAGENTIC_ORCHESTRATOR", event_type: "plan_created", content: { plan: "1. StringAgent: reverse 'hello'\n2. MathAgent: multiply 15 by 4" } }, delay: 800 },
+                { action: 'WORKFLOW_STEP', agent: 'Manager', icon: 'brain', color: 'purple', text: "Created orchestration plan. Delegating task 1.", detail: "1. StringAgent (reverse 'hello')\n2. MathAgent (15 * 4)", delay: 1000 },
+                { action: 'SSE', payload: { type: "A2A_DELEGATION", executor_id: "MagenticManager", target: "StringAgent", task: "Reverse the string 'hello'" }, delay: 500 },
+                { action: 'SSE', payload: { type: "TOOL_CALL_START", toolCallId: "call_str_1", toolCallName: "string_reverse", args: { input: "hello" } }, delay: 600 },
+                { action: 'WORKFLOW_STEP', agent: 'StringAgent', icon: 'type', color: 'green', text: "Executing backend tool: string_reverse({'input': 'hello'})", delay: 1200 },
+                { action: 'SSE', payload: { type: "TOOL_CALL_RESULT", toolCallId: "call_str_1", result: "olleh" }, delay: 400 },
+                { action: 'WORKFLOW_STEP_RESULT', agent: 'StringAgent', color: 'green', text: "Result: 'olleh'", delay: 800 },
+                { action: 'SSE', payload: { type: "MAGENTIC_ORCHESTRATOR", event_type: "progress_ledger_update", content: { completed: ["task_1"], pending: ["task_2"] } }, delay: 500 },
+                { action: 'SSE', payload: { type: "A2A_DELEGATION", executor_id: "MagenticManager", target: "MathAgent", task: "Calculate 15 * 4" }, delay: 500 },
+                { action: 'SSE', payload: { type: "TOOL_CALL_START", toolCallId: "call_math_1", toolCallName: "math_multiply", args: { a: 15, b: 4 } }, delay: 600 },
+                { action: 'WORKFLOW_STEP', agent: 'MathAgent', icon: 'calculator', color: 'orange', text: "Executing backend tool: math_multiply({'a': 15, 'b': 4})", delay: 1200 },
+                { action: 'SSE', payload: { type: "TOOL_CALL_RESULT", toolCallId: "call_math_1", result: 60 }, delay: 400 },
+                { action: 'WORKFLOW_STEP_RESULT', agent: 'MathAgent', color: 'orange', text: "Result: 60", delay: 800 },
+                { action: 'SSE', payload: { type: "MAGENTIC_ORCHESTRATOR", event_type: "plan_completed", content: { final_output: "String reversed: olleh. Math result: 60." } }, delay: 600 },
+                { action: 'WORKFLOW_STEP', agent: 'Manager', icon: 'check-circle', color: 'purple', text: "All sub-tasks completed. Returning aggregated results to Chat Agent.", delay: 800 },
+                { action: 'SSE', payload: { type: "TOOL_CALL_RESULT", toolCallId: "call_mag_1", result: "String reversed: olleh. Math result: 60." }, delay: 500 },
+                { action: 'WORKFLOW_END', delay: 400 },
+                { action: 'SSE', payload: { type: "TEXT_MESSAGE_START", messageId: "msg_2", role: "assistant" }, delay: 200 },
+                { action: 'TEXT_STREAM', text: "I have processed your request.", delay: 600 },
+                { action: 'SSE', payload: { type: "TEXT_MESSAGE_CONTENT", delta: " I have processed your request." }, delay: 100 },
+                { action: 'TEXT_STREAM', text: " Using my Magentic Orchestration workflow, I coordinated with my specialized agents.", delay: 800 },
+                { action: 'SSE', payload: { type: "TEXT_MESSAGE_CONTENT", delta: " Using my Magentic Orchestration workflow, I coordinated with my specialized agents." }, delay: 100 },
+                { action: 'TEXT_STREAM', text: "\n\n1. The reversed string is **olleh**.", delay: 600 },
+                { action: 'SSE', payload: { type: "TEXT_MESSAGE_CONTENT", delta: "\n\n1. The reversed string is **olleh**." }, delay: 100 },
+                { action: 'TEXT_STREAM', text: "\n2. The calculation of 15 multiplied by 4 is **60**.", delay: 600 },
+                { action: 'SSE', payload: { type: "TEXT_MESSAGE_CONTENT", delta: "\n2. The calculation of 15 multiplied by 4 is **60**." }, delay: 100 },
+                { action: 'SSE', payload: { type: "TEXT_MESSAGE_END", messageId: "msg_2" }, delay: 200 },
+                { action: 'SSE', payload: { type: "RUN_FINISHED", threadId: "th_9x8k", runId: "run_ui1" }, delay: 200 },
+                { action: 'END', delay: 0 }
+            ],
+            sc2: [
+                { action: 'USER_MSG', text: "Solve 3+5*10/2 and reverse the result. Also reverse the string 'race' and convert it to uppercase.", delay: 500 },
+                { action: 'SSE', payload: { type: "RUN_STARTED", threadId: "th_9x8k", runId: "run_ui2" }, delay: 200 },
+                { action: 'AGENT_START', delay: 400 },
+                { action: 'SSE', payload: { type: "TOOL_CALL_START", toolCallId: "call_mag_2", toolCallName: "MagenticWorkflow" }, delay: 500 },
+                { action: 'WORKFLOW_START', delay: 600 },
+                { action: 'SSE', payload: { type: "MAGENTIC_ORCHESTRATOR", event_type: "plan_created", content: { plan: "1. MathAgent: eval(3+5*10/2)\n2. StringAgent: reverse result #1\n3. StringAgent: reverse 'race'\n4. StringAgent: uppercase result #3" } }, delay: 800 },
+                { action: 'WORKFLOW_STEP', agent: 'Manager', icon: 'brain', color: 'purple', text: "Created plan. Delegating step 1.", detail: "1. MathAgent (3+5*10/2)", delay: 1000 },
+                { action: 'SSE', payload: { type: "A2A_DELEGATION", executor_id: "MagenticManager", target: "MathAgent", task: "Calculate 3+5*10/2" }, delay: 500 },
+                { action: 'SSE', payload: { type: "TOOL_CALL_START", toolCallId: "call_m1", toolCallName: "math_eval", args: { expression: "3+5*10/2" } }, delay: 600 },
+                { action: 'WORKFLOW_STEP', agent: 'MathAgent', icon: 'calculator', color: 'orange', text: "Executing tool: math_eval('3+5*10/2')", delay: 1200 },
+                { action: 'SSE', payload: { type: "TOOL_CALL_RESULT", toolCallId: "call_m1", result: 28 }, delay: 400 },
+                { action: 'WORKFLOW_STEP_RESULT', agent: 'MathAgent', color: 'orange', text: "Result: 28", delay: 800 },
+
+                { action: 'WORKFLOW_STEP', agent: 'Manager', icon: 'brain', color: 'purple', text: "Step 1 done. Delegating step 2.", detail: "2. StringAgent (reverse '28')", delay: 1000 },
+                { action: 'SSE', payload: { type: "A2A_DELEGATION", executor_id: "MagenticManager", target: "StringAgent", task: "Reverse string '28'" }, delay: 500 },
+                { action: 'SSE', payload: { type: "TOOL_CALL_START", toolCallId: "call_s1", toolCallName: "string_reverse", args: { input: "28" } }, delay: 600 },
+                { action: 'WORKFLOW_STEP', agent: 'StringAgent', icon: 'type', color: 'green', text: "Executing tool: string_reverse('28')", delay: 1200 },
+                { action: 'SSE', payload: { type: "TOOL_CALL_RESULT", toolCallId: "call_s1", result: "82" }, delay: 400 },
+                { action: 'WORKFLOW_STEP_RESULT', agent: 'StringAgent', color: 'green', text: "Result: '82'", delay: 800 },
+
+                { action: 'WORKFLOW_STEP', agent: 'Manager', icon: 'brain', color: 'purple', text: "Delegating tasks 3 & 4 chained.", detail: "StringAgent (reverse and uppercase 'race')", delay: 1000 },
+                { action: 'SSE', payload: { type: "A2A_DELEGATION", executor_id: "MagenticManager", target: "StringAgent", task: "Reverse and uppercase 'race'" }, delay: 500 },
+                { action: 'SSE', payload: { type: "TOOL_CALL_START", toolCallId: "call_s2", toolCallName: "string_manipulate", args: { input: "race", ops: ["reverse", "uppercase"] } }, delay: 600 },
+                { action: 'WORKFLOW_STEP', agent: 'StringAgent', icon: 'type', color: 'green', text: "Executing tool: string_manipulate('race', ['reverse', 'upper'])", delay: 1200 },
+                { action: 'SSE', payload: { type: "TOOL_CALL_RESULT", toolCallId: "call_s2", result: "ECAR" }, delay: 400 },
+                { action: 'WORKFLOW_STEP_RESULT', agent: 'StringAgent', color: 'green', text: "Result: 'ECAR'", delay: 800 },
+
+                { action: 'SSE', payload: { type: "MAGENTIC_ORCHESTRATOR", event_type: "plan_completed", content: { final_output: "Math reversed: 82. String processed: ECAR." } }, delay: 600 },
+                { action: 'WORKFLOW_STEP', agent: 'Manager', icon: 'check-circle', color: 'purple', text: "All sub-tasks completed. Returning aggregated results.", delay: 800 },
+                { action: 'SSE', payload: { type: "TOOL_CALL_RESULT", toolCallId: "call_mag_2", result: "Math reversed: 82. String processed: ECAR." }, delay: 500 },
+                { action: 'WORKFLOW_END', delay: 400 },
+
+                { action: 'SSE', payload: { type: "TEXT_MESSAGE_START", messageId: "msg_2", role: "assistant" }, delay: 200 },
+                { action: 'TEXT_STREAM', text: "I have processed your multi-part request.", delay: 600 },
+                { action: 'SSE', payload: { type: "TEXT_MESSAGE_CONTENT", delta: "I have processed your multi-part request." }, delay: 100 },
+                { action: 'TEXT_STREAM', text: "\n\n1. The calculation of 3+5*10/2 gives 28. Reversed, it becomes **82**.", delay: 600 },
+                { action: 'SSE', payload: { type: "TEXT_MESSAGE_CONTENT", delta: "\n\n1. The calculation of 3+5*10/2 gives 28. Reversed, it becomes **82**." }, delay: 100 },
+                { action: 'TEXT_STREAM', text: "\n2. The string 'race' reversed and converted to uppercase is **ECAR**.", delay: 600 },
+                { action: 'SSE', payload: { type: "TEXT_MESSAGE_CONTENT", delta: "\n2. The string 'race' reversed and converted to uppercase is **ECAR**." }, delay: 100 },
+                { action: 'SSE', payload: { type: "TEXT_MESSAGE_END", messageId: "msg_2" }, delay: 200 },
+                { action: 'SSE', payload: { type: "RUN_FINISHED", threadId: "th_9x8k", runId: "run_ui2" }, delay: 200 },
+                { action: 'END', delay: 0 }
+            ],
+            sc3: [
+                { action: 'USER_MSG', text: "Calculate the square root of 144, add it to 100, and then divide by 2.", delay: 500 },
+                { action: 'SSE', payload: { type: "RUN_STARTED", threadId: "th_9x8k", runId: "run_ui3" }, delay: 200 },
+                { action: 'AGENT_START', delay: 400 },
+                { action: 'SSE', payload: { type: "TOOL_CALL_START", toolCallId: "call_mag_3", toolCallName: "MagenticWorkflow" }, delay: 500 },
+                { action: 'WORKFLOW_START', delay: 600 },
+                { action: 'SSE', payload: { type: "MAGENTIC_ORCHESTRATOR", event_type: "plan_created", content: { plan: "1. MathAgent: eval( (sqrt(144) + 100) / 2 )" } }, delay: 800 },
+                { action: 'WORKFLOW_STEP', agent: 'Manager', icon: 'brain', color: 'purple', text: "Delegating math calculation.", detail: "1. MathAgent ( (12 + 100) / 2 )", delay: 1000 },
+                { action: 'SSE', payload: { type: "A2A_DELEGATION", executor_id: "MagenticManager", target: "MathAgent", task: "Calculate (sqrt(144) + 100) / 2" }, delay: 500 },
+                { action: 'SSE', payload: { type: "TOOL_CALL_START", toolCallId: "call_m1", toolCallName: "math_eval", args: { expression: "(sqrt(144)+100)/2" } }, delay: 600 },
+                { action: 'WORKFLOW_STEP', agent: 'MathAgent', icon: 'calculator', color: 'orange', text: "Executing tool: math_eval('(sqrt(144)+100)/2')", delay: 1200 },
+                { action: 'SSE', payload: { type: "TOOL_CALL_RESULT", toolCallId: "call_m1", result: 56 }, delay: 400 },
+                { action: 'WORKFLOW_STEP_RESULT', agent: 'MathAgent', color: 'orange', text: "Result: 56", delay: 800 },
+                { action: 'SSE', payload: { type: "MAGENTIC_ORCHESTRATOR", event_type: "plan_completed", content: { final_output: "Math result: 56." } }, delay: 600 },
+                { action: 'WORKFLOW_STEP', agent: 'Manager', icon: 'check-circle', color: 'purple', text: "Sub-task completed. Returning results.", delay: 800 },
+                { action: 'SSE', payload: { type: "TOOL_CALL_RESULT", toolCallId: "call_mag_3", result: "Math result: 56." }, delay: 500 },
+                { action: 'WORKFLOW_END', delay: 400 },
+                { action: 'SSE', payload: { type: "TEXT_MESSAGE_START", messageId: "msg_3", role: "assistant" }, delay: 200 },
+                { action: 'TEXT_STREAM', text: "Based on my Math Agent's calculation, the final result is **56**.", delay: 600 },
+                { action: 'SSE', payload: { type: "TEXT_MESSAGE_CONTENT", delta: "Based on my Math Agent's calculation, the final result is **56**." }, delay: 100 },
+                { action: 'SSE', payload: { type: "TEXT_MESSAGE_END", messageId: "msg_3" }, delay: 200 },
+                { action: 'SSE', payload: { type: "RUN_FINISHED", threadId: "th_9x8k", runId: "run_ui3" }, delay: 200 },
+                { action: 'END', delay: 0 }
+            ],
+            sc4: [
+                { action: 'USER_MSG', text: "Convert the string 'multi-agent orchestration' to uppercase, then reverse it.", delay: 500 },
+                { action: 'SSE', payload: { type: "RUN_STARTED", threadId: "th_9x8k", runId: "run_ui4" }, delay: 200 },
+                { action: 'AGENT_START', delay: 400 },
+                { action: 'SSE', payload: { type: "TOOL_CALL_START", toolCallId: "call_mag_4", toolCallName: "MagenticWorkflow" }, delay: 500 },
+                { action: 'WORKFLOW_START', delay: 600 },
+                { action: 'SSE', payload: { type: "MAGENTIC_ORCHESTRATOR", event_type: "plan_created", content: { plan: "1. StringAgent: convert to uppercase\n2. StringAgent: reverse the uppercase string" } }, delay: 800 },
+                { action: 'WORKFLOW_STEP', agent: 'Manager', icon: 'brain', color: 'purple', text: "Delegating sequential string manipulations.", detail: "StringAgent (uppercase -> reverse)", delay: 1000 },
+                { action: 'SSE', payload: { type: "A2A_DELEGATION", executor_id: "MagenticManager", target: "StringAgent", task: "Uppercase and reverse 'multi-agent orchestration'" }, delay: 500 },
+                { action: 'SSE', payload: { type: "TOOL_CALL_START", toolCallId: "call_s1", toolCallName: "string_manipulate", args: { input: "multi-agent orchestration", ops: ["uppercase", "reverse"] } }, delay: 600 },
+                { action: 'WORKFLOW_STEP', agent: 'StringAgent', icon: 'type', color: 'green', text: "Executing tool: string_manipulate(..., ['upper', 'reverse'])", delay: 1200 },
+                { action: 'SSE', payload: { type: "TOOL_CALL_RESULT", toolCallId: "call_s1", result: "NOITARTSEHCRO TNEGA-ITLUM" }, delay: 400 },
+                { action: 'WORKFLOW_STEP_RESULT', agent: 'StringAgent', color: 'green', text: "Result: 'NOITARTSEHCRO TNEGA-ITLUM'", delay: 800 },
+                { action: 'SSE', payload: { type: "MAGENTIC_ORCHESTRATOR", event_type: "plan_completed", content: { final_output: "String result: NOITARTSEHCRO TNEGA-ITLUM" } }, delay: 600 },
+                { action: 'WORKFLOW_STEP', agent: 'Manager', icon: 'check-circle', color: 'purple', text: "String manipulation completed. Returning results.", delay: 800 },
+                { action: 'SSE', payload: { type: "TOOL_CALL_RESULT", toolCallId: "call_mag_4", result: "String result: NOITARTSEHCRO TNEGA-ITLUM" }, delay: 500 },
+                { action: 'WORKFLOW_END', delay: 400 },
+                { action: 'SSE', payload: { type: "TEXT_MESSAGE_START", messageId: "msg_4", role: "assistant" }, delay: 200 },
+                { action: 'TEXT_STREAM', text: "The converted and reversed string is: **NOITARTSEHCRO TNEGA-ITLUM**", delay: 600 },
+                { action: 'SSE', payload: { type: "TEXT_MESSAGE_CONTENT", delta: "The converted and reversed string is: **NOITARTSEHCRO TNEGA-ITLUM**" }, delay: 100 },
+                { action: 'SSE', payload: { type: "TEXT_MESSAGE_END", messageId: "msg_4" }, delay: 200 },
+                { action: 'SSE', payload: { type: "RUN_FINISHED", threadId: "th_9x8k", runId: "run_ui4" }, delay: 200 },
+                { action: 'END', delay: 0 }
+            ]
+        };
+
+        // Utility Helpers
+        const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+        const scrollToBottom = (elem) => {
+            elem.scrollTop = elem.scrollHeight;
+        };
+
+        const syntaxHighlightJSON = (json) => {
+            if (typeof json != 'string') json = JSON.stringify(json, undefined, 2);
+            json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+                let cls = 'json-number';
+                if (/^"/.test(match)) {
+                    if (/:$/.test(match)) cls = 'json-key';
+                    else cls = 'json-string';
+                } else if (/true|false/.test(match)) {
+                    cls = 'json-boolean';
+                } else if (/null/.test(match)) {
+                    cls = 'text-gray-500';
+                }
+                return '<span class="' + cls + '">' + match + '</span>';
+            });
+        };
+
+        const logSSE = (payload) => {
+            const entry = document.createElement('div');
+            entry.className = "mb-3 border-l-2 border-green-500/50 pl-3 bg-gray-800/20 p-2 rounded-r-md";
+
+            const timestamp = new Date().toISOString().split('T')[1].slice(0, -1);
+
+            entry.innerHTML = `
+                <div class="text-gray-500 text-[10px] mb-1">${timestamp} - SSE Event Data</div>
+                <pre class="whitespace-pre-wrap break-words">${syntaxHighlightJSON(payload)}</pre>
+            `;
+            consoleContainer.appendChild(entry);
+            scrollToBottom(consoleContainer);
+        };
+
+        // Simulation Controller
+        async function runSimulation() {
+            if (isRunning) return;
+            isRunning = true;
+
+            const selectedQuery = querySelect.value;
+            const scenario = allScenarios[selectedQuery];
+
+            startBtn.disabled = true;
+            resetBtn.disabled = true;
+            sendBtn.disabled = true;
+            startBtn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Running...';
+            sendBtn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>';
+            lucide.createIcons();
+
+            emptyState.style.display = 'none';
+            streamPulse.style.display = 'inline-flex';
+            consoleContainer.innerHTML = ''; // clear console
+            chatContainer.innerHTML = ''; // clear chat
+
+            let activeTextContainer = null;
+
+            for (const step of scenario) {
+                if (!isRunning) break; // Allow interruption
+
+                await sleep(step.delay);
+
+                switch (step.action) {
+                    case 'SSE':
+                        logSSE(step.payload);
+                        break;
+
+                    case 'USER_MSG':
+                        const userTpl = document.getElementById('tpl-user-msg').content.cloneNode(true);
+                        userTpl.querySelector('.msg-content').textContent = step.text;
+                        chatContainer.appendChild(userTpl);
+                        scrollToBottom(chatContainer);
+                        break;
+
+                    case 'AGENT_START':
+                        const agentTpl = document.getElementById('tpl-agent-wrapper').content.cloneNode(true);
+                        activeAgentWrapper = document.createElement('div');
+                        activeAgentWrapper.className = 'w-full';
+                        chatContainer.appendChild(agentTpl);
+                        const allWrappers = chatContainer.querySelectorAll('.agent-content-area');
+                        activeAgentWrapper = allWrappers[allWrappers.length - 1];
+                        lucide.createIcons();
+                        scrollToBottom(chatContainer);
+                        break;
+
+                    case 'WORKFLOW_START':
+                        const wfTpl = document.getElementById('tpl-nested-workflow').content.cloneNode(true);
+                        activeAgentWrapper.appendChild(wfTpl);
+                        const allBodies = activeAgentWrapper.querySelectorAll('.workflow-body');
+                        activeWorkflowBody = allBodies[allBodies.length - 1];
+                        lucide.createIcons();
+                        scrollToBottom(chatContainer);
+                        break;
+
+                    case 'WORKFLOW_STEP':
+                        const stepDiv = document.createElement('div');
+                        stepDiv.className = `flex items-start gap-3 p-2 rounded bg-gray-800/50 border border-gray-700/50`;
+
+                        // Define colors based on agent role
+                        let iconColor = 'text-gray-400';
+                        if (step.color === 'purple') iconColor = 'text-purple-400';
+                        if (step.color === 'green') iconColor = 'text-green-400';
+                        if (step.color === 'orange') iconColor = 'text-orange-400';
+
+                        let detailHtml = step.detail ? `<pre class="mt-2 text-xs bg-gray-900 p-2 rounded text-gray-400 border border-gray-700">${step.detail}</pre>` : '';
+
+                        stepDiv.innerHTML = `
+                            <div class="mt-0.5 ${iconColor}">
+                                <i data-lucide="${step.icon}" class="w-4 h-4"></i>
+                            </div>
+                            <div class="flex-1">
+                                <div class="text-xs font-semibold text-gray-300">${step.agent}</div>
+                                <div class="text-xs text-gray-400 mt-0.5">${step.text}</div>
+                                ${detailHtml}
+                            </div>
+                        `;
+                        activeWorkflowBody.appendChild(stepDiv);
+                        lucide.createIcons();
+                        scrollToBottom(chatContainer);
+                        break;
+
+                    case 'WORKFLOW_STEP_RESULT':
+                        const resDiv = document.createElement('div');
+                        resDiv.className = `nested-line text-xs font-mono mb-2`;
+
+                        let resColor = 'text-gray-400';
+                        if (step.color === 'green') resColor = 'text-green-400';
+                        if (step.color === 'orange') resColor = 'text-orange-400';
+
+                        resDiv.innerHTML = `↳ <span class="${resColor}">${step.text}</span>`;
+                        activeWorkflowBody.appendChild(resDiv);
+                        scrollToBottom(chatContainer);
+                        break;
+
+                    case 'WORKFLOW_END':
+                        const activeIndicator = activeAgentWrapper.querySelector('.active-indicator');
+                        if (activeIndicator) {
+                            activeIndicator.classList.remove('animate-pulse', 'text-gray-400');
+                            activeIndicator.classList.add('text-green-500');
+                            activeIndicator.innerHTML = '<i data-lucide="check" class="w-4 h-4"></i> completed';
+                            lucide.createIcons();
+                        }
+                        break;
+
+                    case 'TEXT_STREAM':
+                        if (!activeTextContainer) {
+                            activeTextContainer = document.createElement('div');
+                            activeTextContainer.className = "text-gray-200 mt-4 leading-relaxed whitespace-pre-wrap border-l-2 border-blue-500 pl-3";
+                            activeAgentWrapper.appendChild(activeTextContainer);
+                        }
+
+                        // Fake typing effect for the chunk
+                        activeTextContainer.classList.add('typing-indicator');
+                        await simulateTyping(activeTextContainer, step.text);
+                        activeTextContainer.classList.remove('typing-indicator');
+                        scrollToBottom(chatContainer);
+                        break;
+
+                    case 'END':
+                        isRunning = false;
+                        startBtn.disabled = false;
+                        resetBtn.disabled = false;
+                        sendBtn.disabled = false;
+                        startBtn.innerHTML = '<i data-lucide="play" class="w-4 h-4"></i> Run Simulation';
+                        sendBtn.innerHTML = '<i data-lucide="send" class="w-4 h-4"></i> Send';
+                        streamPulse.style.display = 'none';
+                        lucide.createIcons();
+                        break;
+                }
+            }
+        }
+
+        async function simulateTyping(element, text) {
+            let currentText = element.innerHTML;
+            // Handle markdown bold parsing simply for the demo
+            let formattedChunk = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+            // To make typing look real but fast, we just append chunk directly with slight delay
+            // A real app would just append the delta immediately. We are adding visual flair.
+            element.innerHTML += formattedChunk;
+            await sleep(50);
+        }
+
+        function resetSimulation() {
+            isRunning = false;
+            chatContainer.innerHTML = '';
+            consoleContainer.innerHTML = '<div class="text-gray-500">// Waiting for SSE connection...</div>';
+            chatContainer.appendChild(emptyState);
+            emptyState.style.display = 'block';
+            startBtn.disabled = false;
+            resetBtn.disabled = false;
+            sendBtn.disabled = false;
+            startBtn.innerHTML = '<i data-lucide="play" class="w-4 h-4"></i> Run Simulation';
+            sendBtn.innerHTML = '<i data-lucide="send" class="w-4 h-4"></i> Send';
+            streamPulse.style.display = 'none';
+            lucide.createIcons();
+        }
+
+        // Event Listeners
+        startBtn.addEventListener('click', runSimulation);
+        sendBtn.addEventListener('click', runSimulation);
+        resetBtn.addEventListener('click', resetSimulation);
+
+    </script>
+</body>
+
+</html>
