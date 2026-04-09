@@ -3,20 +3,24 @@ import json
 import os
 from typing import Any, AsyncGenerator
 
+# FastAPI Imports for testing
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
 # Microsoft Agent Framework Imports
 from agent_framework import Agent
 from agent_framework.openai import OpenAIChatCompletionClient
 from agent_framework.orchestrations import MagenticBuilder
 
-# AG-UI Integration Imports
-# AgentFrameworkAgent wraps any MAF workflow/agent to yield standard AG-UI protocol events
-from agent_framework.ag_ui import AgentFrameworkAgent
+# AG-UI Integration Import (The official public endpoint binder)
+from agent_framework.ag_ui import add_agent_framework_fastapi_endpoint
 
 # ==========================================
 # 1. Configuration & Client Setup
 # ==========================================
 
-# Replace with your actual OpenAI API credentials and custom endpoint
+# Make sure to set these environment variables before running, 
+# or replace the defaults with your actual keys/endpoints.
 API_KEY = os.getenv("OPENAI_API_KEY", "your-openai-api-key")
 ENDPOINT = os.getenv("OPENAI_ENDPOINT", "https://api.openai.com/v1")
 MODEL = "gpt-4o"
@@ -63,7 +67,7 @@ def reverse_string(s: str) -> str:
 
 math_agent = Agent(
     name="MathAgent",
-    instructions="You are a math specialist. Use your tools to solve math queries precisely. Only answer math-related parts.",
+    instructions="You are a math specialist. Use your tools to solve math queries precisely.",
     client=client,
     tools=[add, multiply, divide]
 )
@@ -77,16 +81,14 @@ string_agent = Agent(
 
 manager_agent = Agent(
     name="MagenticManager",
-    instructions="You are the Magentic Manager. Coordinate the MathAgent and StringAgent to solve complex, multi-step problems.",
+    instructions="You are the Magentic Manager. Coordinate the MathAgent and StringAgent to solve complex problems.",
     client=client
 )
 
 # ==========================================
 # 4. Build Magentic Orchestration Workflow
 # ==========================================
-
-# intermediate_outputs=True is critical: it tells the manager to yield its 
-# meta-reasoning and MagenticProgressLedger events into the stream.
+# intermediate_outputs=True is critical for exposing MagenticProgressLedger events
 magentic_workflow = MagenticBuilder(
     participants=[math_agent, string_agent],
     manager_agent=manager_agent,
@@ -100,12 +102,11 @@ magentic_workflow = MagenticBuilder(
 
 class MasterRouterWorkflow:
     """
-    Acts as the entry point, evaluating the user's prompt and routing 
-    the request to the appropriate agent or orchestration.
-    Implements the standard `run_stream` duck-typing protocol required by MAF.
+    Acts as the single entry point. Evaluates the prompt and routes 
+    the request to the appropriate single agent or the Magentic orchestrator.
     """
     name = "MasterRouter"
-    description = "Routes queries to specialized agents or the Magentic workflow."
+    description = "Routes queries to specialized agents or Magentic workflow."
     
     def __init__(self, math, string, magentic):
         self.math_agent = math
@@ -113,11 +114,10 @@ class MasterRouterWorkflow:
         self.magentic_workflow = magentic
 
     async def run_stream(self, messages: list[Any], *args, **kwargs) -> AsyncGenerator[Any, None]:
-        # Extract text from the latest message
+        # Extract text from the latest message safely
         last_msg = messages[-1]
         content = ""
         
-        # Handle different message format types (dict or object) depending on frontend payload
         if hasattr(last_msg, "content"):
             content = last_msg.content
         elif isinstance(last_msg, dict):
@@ -125,41 +125,46 @@ class MasterRouterWorkflow:
             
         content_lower = content.lower()
         
-        # ----------------------------------
-        # Dynamic Routing Logic
-        # ----------------------------------
+        # --- Routing Logic ---
         if content_lower.startswith("math:"):
-            print("\n[Router] Routing to Single Agent: MathAgent")
+            print("\n[Router] 🧭 Routing to Single Agent: MathAgent")
             async for event in self.math_agent.run_stream(messages, *args, **kwargs):
                 yield event
                 
         elif content_lower.startswith("string:"):
-            print("\n[Router] Routing to Single Agent: StringAgent")
+            print("\n[Router] 🧭 Routing to Single Agent: StringAgent")
             async for event in self.string_agent.run_stream(messages, *args, **kwargs):
                 yield event
                 
-        else: # Defaults to "magentic:" or unrecognized prefixes
-            print("\n[Router] Routing to Orchestrator: Magentic Workflow")
+        elif content_lower.startswith("magentic:"):
+            print("\n[Router] 🧭 Routing to Orchestrator: Magentic Workflow")
+            async for event in self.magentic_workflow.run_stream(messages, *args, **kwargs):
+                yield event
+                
+        else:
+            # Default fallback if no prefix is matched
+            print("\n[Router] 🧭 Defaulting to Orchestrator: Magentic Workflow")
             async for event in self.magentic_workflow.run_stream(messages, *args, **kwargs):
                 yield event
 
-# Instantiate the Router
 router_workflow = MasterRouterWorkflow(math_agent, string_agent, magentic_workflow)
 
 # ==========================================
-# 6. Bind to AG-UI and Execute
+# 6. Bind to FastAPI and Emulate AG-UI Client
 # ==========================================
 
-async def main():
-    # 1. Wrap the Router with AG-UI integration. 
-    # This automatically translates native MAF WorkflowEvents into strict AG-UI protocol events.
-    ag_ui_bridge = AgentFrameworkAgent(agent=router_workflow)
+def main():
+    # 1. Create a FastAPI app and bind our Router using the official MAF AG-UI endpoint
+    app = FastAPI()
+    add_agent_framework_fastapi_endpoint(app, path="/chat", workflow=router_workflow)
 
-    # 2. Define our test queries based on the routing rules
+    # 2. Use FastAPI's TestClient to simulate real HTTP frontend requests
+    test_client = TestClient(app)
+
     test_queries = [
         "math: What is 56 multiplied by 14?",
         "string: Please reverse the word 'Orchestration'",
-        "magentic: First calculate 25 multiplied by 4, then take the result and spell it completely backwards."
+        "magentic: Calculate 25 multiplied by 4, then spell the result backwards."
     ]
 
     all_agui_events = []
@@ -169,27 +174,32 @@ async def main():
         print(f"Prompt: {query}")
         
         run_events = []
-        # Simulate the payload shape that an AG-UI frontend sends via HTTP
-        input_data = {"messages": [{"role": "user", "content": query}]}
+        payload = {"messages": [{"role": "user", "content": query}]}
         
-        # 3. Execute the run and intercept the AG-UI formatted events
         try:
-            # run_agent() triggers the router, which triggers the target workflow,
-            # which bubbles up MAF events, which are converted to AG-UI events.
-            async for ag_ui_event in ag_ui_bridge.run_agent(input_data):
-                
-                # ag_ui_event is an AG-UI BaseEvent pydantic model. 
-                # .model_dump() serializes it to a clean dictionary.
-                event_dict = ag_ui_event.model_dump()
-                run_events.append(event_dict)
-                
-                event_type = event_dict.get("type", "UNKNOWN")
-                print(f"  -> Emitted AG-UI Event: {event_type}")
-                
+            # 3. Send POST request to our mock AG-UI endpoint
+            # This triggers the router and streams back Server-Sent Events (SSE)
+            response = test_client.post("/chat", json=payload)
+            
+            # 4. Parse the SSE stream line by line
+            # SSE streams format data as: data: {"type": "...", ...}\n\n
+            for line in response.text.splitlines():
+                if line.startswith("data: "):
+                    event_str = line[6:].strip() # Remove 'data: ' prefix
+                    
+                    if event_str == "[DONE]":
+                        continue
+                        
+                    # Parse the standard AG-UI JSON event
+                    event_json = json.loads(event_str)
+                    run_events.append(event_json)
+                    
+                    event_type = event_json.get("type", "UNKNOWN")
+                    print(f"  -> Captured AG-UI Event: {event_type}")
+                    
         except Exception as e:
             print(f"Error during execution: {e}")
 
-        # Store events for this specific run
         all_agui_events.append({
             "query": query,
             "events": run_events
@@ -205,4 +215,5 @@ async def main():
     print(f"\n✅ Execution complete. All AG-UI protocol events successfully saved to '{output_filename}'")
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # TestClient is synchronous, so we don't need asyncio.run() for the main block
+    main()
